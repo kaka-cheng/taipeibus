@@ -48,10 +48,12 @@ jobs:
               if len(tds) < 4:
                   continue
 
-              cols = [td.get_text(" ", strip=True) for td in tds[:4]]
+              cols = [td.get_text(" ", strip=True).replace("\xa0", " ").strip() for td in tds[:4]]
+              print(cols)
+
               route, stop, direction, eta = cols
 
-              if route == "257" and stop == "成福路口" and direction == "返程":
+              if "257" in route and "成福路口" in stop and "返程" in direction:
                   result = {
                       "route": "257",
                       "dest": "往新莊聯合辦公大樓",
