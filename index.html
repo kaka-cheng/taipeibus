@@ -46,7 +46,7 @@
       <div class="header">
         <div class="title">
           <h1>257｜成福路口（返程）</h1>
-          <div class="sub">每 10 秒自動更新 · v1.1.0</div>
+          <div class="sub">每 10 秒自動更新 · v1.2.0</div>
         </div>
         <button class="refresh-btn" id="refreshBtn">↻</button>
       </div>
@@ -90,13 +90,46 @@
     async function fetchBus(){
       try {
         refreshBtn.disabled = true;
-        const res = await fetch('./bus.json', { cache:'no-store' });
+        const res = await fetch('https://pda5284.gov.taipei/MQS/StopLocationDyna?stoplocationid=6732', { cache:'no-store' });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
         const data = await res.json();
-        render(data);
+        const TARGET_STOP_ID = '11015';
+
+        let eta = '未提供';
+        for (const stop of (data.Stop || [])) {
+          if (!stop.n1) continue;
+          const arr = stop.n1.split(',');
+          if (arr.length < 8) continue;
+          if (arr[1] !== TARGET_STOP_ID) continue;
+
+          const raw = String(arr[7] || '').trim();
+          if (raw === '0') eta = '進站中';
+          else if (raw === '-1') eta = '未發車';
+          else if (raw === '-2') eta = '交管不停';
+          else if (raw === '-3') eta = '末班已過';
+          else if (raw === '-4') eta = '今日未營運';
+          else {
+            const sec = parseInt(raw, 10);
+            eta = Number.isNaN(sec) ? '未提供' : (sec > 0 && sec < 180 ? '將到站' : `${Math.floor(sec / 60)}分`);
+          }
+          break;
+        }
+
+        let updatedAt = new Date().toLocaleString('zh-TW', { hour12:false });
+        if (data.UpdateTime) {
+          updatedAt = data.UpdateTime.replace('T', ' ').replace(/&#x3a;/g, ':').slice(0, 19);
+        }
+
+        render({
+          route: '257',
+          dest: '往新莊聯合辦公大樓',
+          eta,
+          updated_at: updatedAt
+        });
       } catch (err) {
         console.error(err);
-        listEl.innerHTML = '<div class="error">載入失敗，請稍後再試</div>';
+        listEl.innerHTML = '<div class="error">即時資料載入失敗（可能被瀏覽器擋下）</div>';
       } finally {
         refreshBtn.disabled = false;
       }
