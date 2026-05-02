@@ -19,26 +19,18 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Fetch bus page
-        run: curl -L "https://pda5284.gov.taipei/MQS/stoplocation.jsp?slid=6732" -o page.html
-
-      - name: Install parser
-        run: pip install beautifulsoup4
+      - name: Fetch bus JSON
+        run: curl -L "https://pda5284.gov.taipei/MQS/StopLocationDyna?stoplocationid=6732" -o data.json
 
       - name: Parse and build bus.json
         run: |
           python3 << 'PY'
           import json
-          import re
           from pathlib import Path
           from datetime import datetime
-          from bs4 import BeautifulSoup
 
-          html = Path("page.html").read_text(encoding="utf-8", errors="ignore")
-          soup = BeautifulSoup(html, "html.parser")
-
-          text = soup.get_text(" ", strip=True).replace("\xa0", " ")
-          print(text)
+          raw = Path("data.json").read_text(encoding="utf-8", errors="ignore")
+          data = json.loads(raw)
 
           result = {
               "route": "257",
@@ -47,10 +39,45 @@ jobs:
               "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
           }
 
-          match = re.search(r"257\s+成福路口\s+返程\s+([^\s]+)", text)
+          # 257 / 成福路口 / 返程 / sid=11015
+          TARGET_STOP_ID = "11015"
 
-          if match:
-              result["eta"] = match.group(1)
+          for stop in data.get("Stop", []):
+              n1 = stop.get("n1")
+              if not n1:
+                  continue
+
+              arr = n1.split(",")
+              if len(arr) < 8:
+                  continue
+
+              # arr[1] = stop id
+              # arr[7] = ETA (秒 or 特殊碼)
+              if arr[1] == TARGET_STOP_ID:
+                  eta_raw = arr[7].strip()
+
+                  if eta_raw == "0":
+                      eta = "進站中"
+                  elif eta_raw == "-1":
+                      eta = "未發車"
+                  elif eta_raw == "-2":
+                      eta = "交管不停"
+                  elif eta_raw == "-3":
+                      eta = "末班已過"
+                  elif eta_raw == "-4":
+                      eta = "今日未營運"
+                  else:
+                      try:
+                          sec = int(eta_raw)
+                          eta = "將到站" if 0 < sec < 180 else f"{sec // 60}分"
+                      except:
+                          eta = "未提供"
+
+                  result["eta"] = eta
+                  break
+
+          if data.get("UpdateTime"):
+              result["updated_at"] = data["UpdateTime"].replace("T", " ")[:19]
 
           Path("bus.json").write_text(
               json.dumps(result, ensure_ascii=False, indent=2),
