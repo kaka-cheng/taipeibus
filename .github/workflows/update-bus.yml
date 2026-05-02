@@ -29,12 +29,16 @@ jobs:
         run: |
           python3 << 'PY'
           import json
+          import re
           from pathlib import Path
           from datetime import datetime
           from bs4 import BeautifulSoup
 
           html = Path("page.html").read_text(encoding="utf-8", errors="ignore")
           soup = BeautifulSoup(html, "html.parser")
+
+          text = soup.get_text(" ", strip=True).replace("\xa0", " ")
+          print(text)
 
           result = {
               "route": "257",
@@ -43,24 +47,10 @@ jobs:
               "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
           }
 
-          for tr in soup.find_all("tr"):
-              tds = tr.find_all("td")
-              if len(tds) < 4:
-                  continue
+          match = re.search(r"257\s+成福路口\s+返程\s+([^\s]+)", text)
 
-              cols = [td.get_text(" ", strip=True).replace("\xa0", " ").strip() for td in tds[:4]]
-              print(cols)
-
-              route, stop, direction, eta = cols
-
-              if "257" in route and "成福路口" in stop and "返程" in direction:
-                  result = {
-                      "route": "257",
-                      "dest": "往新莊聯合辦公大樓",
-                      "eta": eta or "未提供",
-                      "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                  }
-                  break
+          if match:
+              result["eta"] = match.group(1)
 
           Path("bus.json").write_text(
               json.dumps(result, ensure_ascii=False, indent=2),
