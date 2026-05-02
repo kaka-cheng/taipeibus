@@ -1,5 +1,8 @@
 name: Update Bus ETA
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 on:
   schedule:
     - cron: "*/1 * * * *"
@@ -19,43 +22,43 @@ jobs:
       - name: Fetch bus page
         run: curl -L "https://pda5284.gov.taipei/MQS/stoplocation.jsp?slid=6732" -o page.html
 
+      - name: Install parser
+        run: pip install beautifulsoup4
+
       - name: Parse and build bus.json
         run: |
           python3 << 'PY'
-          import re, json
+          import json
           from pathlib import Path
           from datetime import datetime
+          from bs4 import BeautifulSoup
 
           html = Path("page.html").read_text(encoding="utf-8", errors="ignore")
+          soup = BeautifulSoup(html, "html.parser")
 
-          rows = re.findall(r"<tr.*?>(.*?)</tr>", html, re.S)
-          result = None
+          result = {
+              "route": "257",
+              "dest": "往新莊聯合辦公大樓",
+              "eta": "未提供",
+              "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+          }
 
-          for row in rows:
-              cols = re.findall(r"<td.*?>(.*?)</td>", row, re.S)
-              cols = [re.sub(r"<.*?>", "", c).strip() for c in cols]
-
-              if len(cols) < 4:
+          for tr in soup.find_all("tr"):
+              tds = tr.find_all("td")
+              if len(tds) < 4:
                   continue
 
-              route, stop, direction, eta = cols[:4]
+              cols = [td.get_text(" ", strip=True) for td in tds[:4]]
+              route, stop, direction, eta = cols
 
               if route == "257" and stop == "成福路口" and direction == "返程":
                   result = {
                       "route": "257",
                       "dest": "往新莊聯合辦公大樓",
-                      "eta": eta if eta else "未提供",
+                      "eta": eta or "未提供",
                       "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                   }
                   break
-
-          if result is None:
-              result = {
-                  "route": "257",
-                  "dest": "往新莊聯合辦公大樓",
-                  "eta": "未提供",
-                  "updated_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-              }
 
           Path("bus.json").write_text(
               json.dumps(result, ensure_ascii=False, indent=2),
