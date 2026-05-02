@@ -77,7 +77,11 @@ jobs:
                   break
 
           if data.get("UpdateTime"):
-              result["updated_at"] = data["UpdateTime"].replace("T", " ")[:19]
+              ts = data["UpdateTime"]
+              ts = ts.replace("T", " ")
+              ts = ts.replace("&#x3a;", ":")
+              ts = ts.replace("&nbsp;", " ")
+              result["updated_at"] = ts[:19]
 
           Path("bus.json").write_text(
               json.dumps(result, ensure_ascii=False, indent=2),
